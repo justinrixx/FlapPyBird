@@ -1,11 +1,11 @@
 from itertools import cycle
 import random
 import sys
+import math
+import numpy as np
 
 import pygame
 from pygame.locals import *
-
-import numpy as np
 
 FPS = 30
 SCREENWIDTH  = 288
