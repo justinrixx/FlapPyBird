@@ -5,15 +5,27 @@ import sys
 import pygame
 from pygame.locals import *
 
+import numpy as np
 
 FPS = 30
 SCREENWIDTH  = 288
 SCREENHEIGHT = 512
 # amount by which base can maximum shift to left
-PIPEGAPSIZE  = 100 # gap between upper and lower part of pipe
+PIPEGAPSIZE  = 100  # gap between upper and lower part of pipe
 BASEY        = SCREENHEIGHT * 0.79
 # image, sound and hitmask  dicts
 IMAGES, SOUNDS, HITMASKS = {}, {}, {}
+
+# Q-Learning stuff
+NUM_ACTIONS = 2       # flap or do nothing
+NUM_BUCKETS = (4, 4)  # (x distance, y distance)
+Q_TABLE = np.zeros(NUM_BUCKETS + (NUM_ACTIONS,))
+STATE_BOUNDS = [[SCREENWIDTH / 8, SCREENWIDTH / 2],
+                [-SCREENHEIGHT / 2, SCREENHEIGHT / 2]]
+gamma = .99
+MIN_LEARNING_RATE = .1
+MIN_EPSILON = .01
+
 
 # list of all possible players (tuple of 3 positions of flap)
 PLAYERS_LIST = (
@@ -225,6 +237,9 @@ def mainGame(movementInfo):
 
 
     while True:
+
+        # TODO Q-Learning logic goes here
+
         for event in pygame.event.get():
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
                 pygame.quit()
@@ -428,6 +443,7 @@ def checkCrash(player, upperPipes, lowerPipes):
 
     return [False, False]
 
+
 def pixelCollision(rect1, rect2, hitmask1, hitmask2):
     """Checks if two objects collide and not just their rects"""
     rect = rect1.clip(rect2)
@@ -444,6 +460,7 @@ def pixelCollision(rect1, rect2, hitmask1, hitmask2):
                 return True
     return False
 
+
 def getHitmask(image):
     """returns a hitmask using an image's alpha."""
     mask = []
@@ -452,6 +469,37 @@ def getHitmask(image):
         for y in xrange(image.get_height()):
             mask[x].append(bool(image.get_at((x,y))[3]))
     return mask
+
+
+def state_to_bucket(state):
+    """
+    Converts a state to array indices
+    :param state: An array representing the state of the game. The array should be
+    in the order of: (x distance, y distance).
+    :return: A 1D array of indices representing which bucket the state is in
+    """
+    bucket_indices = []
+    for i in range(len(state)):
+        if state[i] <= STATE_BOUNDS[i][0]:
+            bucket_index = 0
+        elif state[i] >= STATE_BOUNDS[i][1]:
+            bucket_index = len(NUM_BUCKETS[i])
+        else:
+            bound_width = STATE_BOUNDS[i][1] - STATE_BOUNDS[i][0]
+            offset = (NUM_BUCKETS[i] - 1) * STATE_BOUNDS[i][0] / bound_width
+            scaling = (NUM_BUCKETS[i] - 1) / bound_width
+            bucket_index = int(round(scaling * state[i] - offset))
+        bucket_indices.append(bucket_index)
+
+    return bucket_indices
+
+
+def get_epsilon(t):
+    return max(MIN_EPSILON, min(1, 1.0 - math.log10((t + 1) / 25)))
+
+
+def get_learning_rate(t):
+    return max(MIN_LEARNING_RATE, min(0.5, 1.0 - math.log10((t + 1) / 25)))
 
 if __name__ == '__main__':
     main()
