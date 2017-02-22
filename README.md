@@ -16,6 +16,6 @@ How-to
 
 4. Run `python flappy.py` from the repo's directory
 
-5. use <kbd>&uarr;</kbd> or <kbd>Space</kbd> key to play and <kbd>Esc</kbd> to close the game.
+5. You can't play the game. It plays itself.
 
   (Note: Install pyGame for same version python as above)
