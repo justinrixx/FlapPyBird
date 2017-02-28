@@ -18,10 +18,10 @@ IMAGES, SOUNDS, HITMASKS = {}, {}, {}
 
 # Q-Learning stuff
 NUM_ACTIONS = 2       # flap or do nothing
-NUM_BUCKETS = (4, 4)  # (x distance, y distance)
+NUM_BUCKETS = (7, 9)  # (x distance, y distance)
 Q_TABLE = np.zeros(NUM_BUCKETS + (NUM_ACTIONS,))
-STATE_BOUNDS = [[0, SCREENWIDTH / 2],
-                [-SCREENHEIGHT / 2, SCREENHEIGHT / 2]]
+STATE_BOUNDS = [[0, 200],
+                [-SCREENHEIGHT / 4, SCREENHEIGHT / 4]]
 gamma = .99
 MIN_LEARNING_RATE = .1
 MIN_EPSILON = .01
@@ -150,7 +150,9 @@ def main():
 
         movementInfo = showWelcomeAnimation()
         crashInfo = mainGame(movementInfo)
-        showGameOverScreen(crashInfo)
+        #showGameOverScreen(crashInfo)
+        global EPISODE
+        EPISODE += 1
 
 
 def showWelcomeAnimation():
@@ -173,6 +175,15 @@ def showWelcomeAnimation():
 
     # player shm for up-down motion on welcome screen
     playerShmVals = {'val': 0, 'dir': 1}
+
+    ############ AI controls when to go ##########
+    SOUNDS['wing'].play()
+    return {
+        'playery': playery + playerShmVals['val'],
+        'basex': basex,
+        'playerIndexGen': playerIndexGen,
+    }
+    ##############################################
 
     while True:
         for event in pygame.event.get():
@@ -207,6 +218,9 @@ def showWelcomeAnimation():
 
 
 def mainGame(movementInfo):
+
+    newpipetimer = 30
+
     score = playerIndex = loopIter = 0
     playerIndexGen = movementInfo['playerIndexGen']
     playerx, playery = int(SCREENWIDTH * 0.2), movementInfo['playery']
@@ -215,20 +229,20 @@ def mainGame(movementInfo):
     baseShift = IMAGES['base'].get_width() - IMAGES['background'].get_width()
 
     # get 2 new pipes to add to upperPipes lowerPipes list
-    newPipe1 = getRandomPipe()
-    newPipe2 = getRandomPipe()
+    #newPipe1 = getRandomPipe()
+    #newPipe2 = getRandomPipe()
 
     # list of upper pipes
-    upperPipes = [
-        {'x': SCREENWIDTH + 200, 'y': newPipe1[0]['y']},
-        {'x': SCREENWIDTH + 200 + (SCREENWIDTH / 2), 'y': newPipe2[0]['y']},
-    ]
+    upperPipes = []
+    #    {'x': SCREENWIDTH + 200, 'y': newPipe1[0]['y']},
+    #    {'x': SCREENWIDTH + 200 + (SCREENWIDTH / 2), 'y': newPipe2[0]['y']},
+    #]
 
     # list of lowerpipe
-    lowerPipes = [
-        {'x': SCREENWIDTH + 200, 'y': newPipe1[1]['y']},
-        {'x': SCREENWIDTH + 200 + (SCREENWIDTH / 2), 'y': newPipe2[1]['y']},
-    ]
+    lowerPipes = []
+    #    {'x': SCREENWIDTH + 200, 'y': newPipe1[1]['y']},
+    #    {'x': SCREENWIDTH + 200 + (SCREENWIDTH / 2), 'y': newPipe2[1]['y']},
+    #]
 
     pipeVelX = -4
 
@@ -241,6 +255,7 @@ def mainGame(movementInfo):
     playerFlapped = False # True when player flaps
 
     # Q-learning stuff
+    global EPISODE
     reward = 0
     action = ACTION_NOTHING
     learning_rate = get_learning_rate(EPISODE)
@@ -249,16 +264,24 @@ def mainGame(movementInfo):
 
     while True:
 
+        #playerMidPos = playerx + IMAGES['player'][0].get_width() / 2
+        #pipeMidPos = lowerPipes[0]['x'] + IMAGES['pipe'][0].get_width() / 2
+
         # no pipes
         if len(lowerPipes) < 1:
             pipex = SCREENWIDTH
             pipey = SCREENHEIGHT / 2
 
         # past the first pipe
-        elif lowerPipes[0]['x'] < -IMAGES['pipe'][0].get_width():
-            assert len(lowerPipes) > 1
-            pipex = lowerPipes[1]['x']
-            pipey = lowerPipes[1]['y']
+        #elif pipeMidPos <= playerMidPos < pipeMidPos + 4:
+        #    assert len(lowerPipes) > 1
+        #    pipex = lowerPipes[1]['x']
+        #    pipey = lowerPipes[1]['y']
+
+        #elif lowerPipes[1]['x'] + IMAGES['pipe'][0].get_width() / 2 <= playerMidPos < lowerPipes[1]['x'] + IMAGES['pipe'][0].get_width() / 2:
+        #    assert len(lowerPipes) > 2
+        #    pipex = lowerPipes[2]['x']
+        #    pipey = lowerPipes[2]['y']
 
         # next pipe is the first pipe
         else:
@@ -272,7 +295,10 @@ def mainGame(movementInfo):
         #if action == ACTION_NOTHING:
         #    playerFlapped = False
         #else:
-        #    playerFlapped = True
+        #    if playery > -2 * IMAGES['player'][0].get_height():
+        #        playerVelY = playerFlapAcc
+        #        playerFlapped = True
+        #        SOUNDS['wing'].play()
 
         for event in pygame.event.get():
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
@@ -298,11 +324,19 @@ def mainGame(movementInfo):
 
         # check for score
         playerMidPos = playerx + IMAGES['player'][0].get_width() / 2
-        for pipe in upperPipes:
+#        for pipe in upperPipes:
+        itest = 0
+        while itest < len(upperPipes):
+            pipe = upperPipes[itest]
             pipeMidPos = pipe['x'] + IMAGES['pipe'][0].get_width() / 2
             if pipeMidPos <= playerMidPos < pipeMidPos + 4:
                 score += 1
                 SOUNDS['point'].play()
+                # ADDED THIS STUFF
+                upperPipes.pop(itest)
+                lowerPipes.pop(itest)
+                itest -= 1
+            itest += 1
 
         # playerIndex basex change
         if (loopIter + 1) % 3 == 0:
@@ -324,23 +358,25 @@ def mainGame(movementInfo):
             lPipe['x'] += pipeVelX
 
         # add new pipe when first pipe is about to touch left of screen
-        if 0 < upperPipes[0]['x'] < 5:
+        #if 0 < upperPipes[0]['x'] < 5:
+        if newpipetimer <= 0:
             newPipe = getRandomPipe()
             upperPipes.append(newPipe[0])
             lowerPipes.append(newPipe[1])
+            newpipetimer = 30
 
         # remove first pipe if its out of the screen
-        if upperPipes[0]['x'] < -IMAGES['pipe'][0].get_width():
-            upperPipes.pop(0)
-            lowerPipes.pop(0)
+        #if upperPipes[0]['x'] < -IMAGES['pipe'][0].get_width():
+        #    upperPipes.pop(0)
+        #    lowerPipes.pop(0)
 
         # get the new state and update Q
-        state = state_to_bucket([pipex - playerx, pipey - playery])
+        state = state_to_bucket([pipex - playerx - IMAGES['player'][0].get_width(), pipey - playery])
         best_q = np.amax(Q_TABLE[state])
-        Q_TABLE[state_prev + [action,]] += learning_rate * (reward + (gamma * best_q)
-                                                            - Q_TABLE[state_prev + [action,]])
+        Q_TABLE[state_prev + (action,)] += learning_rate * (reward + (gamma * best_q)
+                                                            - Q_TABLE[state_prev + (action,)])
 
-        print(Q_TABLE)
+        state_prev = state
 
         if crashTest[0]:
             # return if a crash happened
@@ -353,6 +389,8 @@ def mainGame(movementInfo):
                 'score': score,
                 'playerVelY': playerVelY,
             }
+
+        newpipetimer -= 1
 
         # draw sprites
         SCREEN.blit(IMAGES['background'], (0,0))
@@ -537,19 +575,19 @@ def state_to_bucket(state):
         elif state[i] >= STATE_BOUNDS[i][1]:
             bucket_index = NUM_BUCKETS[i] - 1
         else:
+            # Mapping the state bounds to the bucket array
             bound_width = STATE_BOUNDS[i][1] - STATE_BOUNDS[i][0]
             offset = (NUM_BUCKETS[i] - 1) * STATE_BOUNDS[i][0] / bound_width
             scaling = (NUM_BUCKETS[i] - 1) / bound_width
             bucket_index = int(round(scaling * state[i] - offset))
         bucket_indices.append(bucket_index)
-
-    return bucket_indices
+    return tuple(bucket_indices)
 
 
 def get_action(state, epsilon):
     # Select a random action
     if random.random() < epsilon:
-        action = random.randInt(0, NUM_ACTIONS - 1)
+        action = random.randint(0, NUM_ACTIONS - 1)
     # Select the action with the highest q
     else:
         action = np.argmax(Q_TABLE[state])
