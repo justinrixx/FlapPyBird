@@ -20,11 +20,16 @@ IMAGES, SOUNDS, HITMASKS = {}, {}, {}
 NUM_ACTIONS = 2       # flap or do nothing
 NUM_BUCKETS = (4, 4)  # (x distance, y distance)
 Q_TABLE = np.zeros(NUM_BUCKETS + (NUM_ACTIONS,))
-STATE_BOUNDS = [[SCREENWIDTH / 8, SCREENWIDTH / 2],
+STATE_BOUNDS = [[0, SCREENWIDTH / 2],
                 [-SCREENHEIGHT / 2, SCREENHEIGHT / 2]]
 gamma = .99
 MIN_LEARNING_RATE = .1
 MIN_EPSILON = .01
+
+ACTION_NOTHING = 1
+ACTION_FLAP = 0
+
+EPISODE = 0
 
 
 # list of all possible players (tuple of 3 positions of flap)
@@ -235,10 +240,39 @@ def mainGame(movementInfo):
     playerFlapAcc =  -9   # players speed on flapping
     playerFlapped = False # True when player flaps
 
+    # Q-learning stuff
+    reward = 0
+    action = ACTION_NOTHING
+    learning_rate = get_learning_rate(EPISODE)
+    epsilon = get_epsilon(EPISODE)
+    state_prev = state_to_bucket([SCREENWIDTH - playerx, (SCREENHEIGHT / 2) - playery])
 
     while True:
 
+        # no pipes
+        if len(lowerPipes) < 1:
+            pipex = SCREENWIDTH
+            pipey = SCREENHEIGHT / 2
+
+        # past the first pipe
+        elif lowerPipes[0]['x'] < -IMAGES['pipe'][0].get_width():
+            assert len(lowerPipes) > 1
+            pipex = lowerPipes[1]['x']
+            pipey = lowerPipes[1]['y']
+
+        # next pipe is the first pipe
+        else:
+            pipex = lowerPipes[0]['x']
+            pipey = lowerPipes[0]['y']
+
         # TODO Q-Learning logic goes here
+        # state -> [deltax, deltay]
+        #action = get_action([pipex - playerx, pipey - playery], epsilon)
+
+        #if action == ACTION_NOTHING:
+        #    playerFlapped = False
+        #else:
+        #    playerFlapped = True
 
         for event in pygame.event.get():
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
@@ -253,16 +287,14 @@ def mainGame(movementInfo):
         # check for crash here
         crashTest = checkCrash({'x': playerx, 'y': playery, 'index': playerIndex},
                                upperPipes, lowerPipes)
+
+        # determine the reward
         if crashTest[0]:
-            return {
-                'y': playery,
-                'groundCrash': crashTest[1],
-                'basex': basex,
-                'upperPipes': upperPipes,
-                'lowerPipes': lowerPipes,
-                'score': score,
-                'playerVelY': playerVelY,
-            }
+            # bad bird
+            reward = -1000
+        else:
+            reward = 1
+
 
         # check for score
         playerMidPos = playerx + IMAGES['player'][0].get_width() / 2
@@ -301,6 +333,26 @@ def mainGame(movementInfo):
         if upperPipes[0]['x'] < -IMAGES['pipe'][0].get_width():
             upperPipes.pop(0)
             lowerPipes.pop(0)
+
+        # get the new state and update Q
+        state = state_to_bucket([pipex - playerx, pipey - playery])
+        best_q = np.amax(Q_TABLE[state])
+        Q_TABLE[state_prev + [action,]] += learning_rate * (reward + (gamma * best_q)
+                                                            - Q_TABLE[state_prev + [action,]])
+
+        print(Q_TABLE)
+
+        if crashTest[0]:
+            # return if a crash happened
+            return {
+                'y': playery,
+                'groundCrash': crashTest[1],
+                'basex': basex,
+                'upperPipes': upperPipes,
+                'lowerPipes': lowerPipes,
+                'score': score,
+                'playerVelY': playerVelY,
+            }
 
         # draw sprites
         SCREEN.blit(IMAGES['background'], (0,0))
@@ -483,7 +535,7 @@ def state_to_bucket(state):
         if state[i] <= STATE_BOUNDS[i][0]:
             bucket_index = 0
         elif state[i] >= STATE_BOUNDS[i][1]:
-            bucket_index = len(NUM_BUCKETS[i])
+            bucket_index = NUM_BUCKETS[i] - 1
         else:
             bound_width = STATE_BOUNDS[i][1] - STATE_BOUNDS[i][0]
             offset = (NUM_BUCKETS[i] - 1) * STATE_BOUNDS[i][0] / bound_width
@@ -492,6 +544,16 @@ def state_to_bucket(state):
         bucket_indices.append(bucket_index)
 
     return bucket_indices
+
+
+def get_action(state, epsilon):
+    # Select a random action
+    if random.random() < epsilon:
+        action = random.randInt(0, NUM_ACTIONS - 1)
+    # Select the action with the highest q
+    else:
+        action = np.argmax(Q_TABLE[state])
+    return action
 
 
 def get_epsilon(t):
